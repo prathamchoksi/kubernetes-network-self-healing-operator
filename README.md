@@ -145,7 +145,7 @@ kubectl exec -it curl-client-2 -n test-namespace-2 -- curl http://nginx-server-1
 ## Documentation
 
 - **[Project Details](./Project_details.md)** - Full specification, scope decisions, plan
-- **[Installation Guide](./INSTALLATION_GUIDE.md)** - Detailed tool installation steps
+- **[Setup Summary](./SETUP_SUMMARY.md)** - Teammate setup and verification guide
 
 ## Common Issues
 
