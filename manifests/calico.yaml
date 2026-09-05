@@ -1,0 +1,6 @@
+# Calico CNI installation note
+# The Calico installation will be done via:
+# kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
+# kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
+#
+# This file is a placeholder for reference. See cluster-setup.sh for actual installation steps.
