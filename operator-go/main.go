@@ -1,14 +1,14 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
+	"sync"
+	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -24,21 +24,17 @@ type AlertmanagerWebhook struct {
 	Alerts   []Alert `json:"alerts"`
 }
 
-var clientset *kubernetes.Clientset
+var (
+	clientset     *kubernetes.Clientset
+	cooldownCache sync.Map
+	cooldownTime  = 60 * time.Second
+)
 
 func main() {
 	log.Println("Starting Self-Healing Operator Webhook Receiver...")
 
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		kubeconfig = os.Getenv("USERPROFILE") + "\\.kube\\config"
-	}
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		log.Fatalf("Failed to build kubeconfig: %v", err)
-	}
-
-	clientset, err = kubernetes.NewForConfig(config)
+	var err error
+	clientset, err = buildClientset()
 	if err != nil {
 		log.Fatalf("Failed to create clientset: %v", err)
 	}
@@ -46,6 +42,20 @@ func main() {
 	http.HandleFunc("/webhook", handleWebhook)
 	log.Println("Listening on :8080...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func buildClientset() (*kubernetes.Clientset, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Println("Not running in cluster, falling back to local kubeconfig...")
+		rules := clientcmd.NewDefaultClientConfigLoadingRules()
+		kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{})
+		config, err = kubeconfig.ClientConfig()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return kubernetes.NewForConfig(config)
 }
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +82,17 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAlert(alertName string, alert Alert) {
+	// Check cooldown to prevent flapping
+	if lastTrigger, ok := cooldownCache.Load(alertName); ok {
+		if time.Since(lastTrigger.(time.Time)) < cooldownTime {
+			log.Printf("Alert %s is in cooldown. Skipping remediation.", alertName)
+			return
+		}
+	}
+
+	// Update cooldown cache
+	cooldownCache.Store(alertName, time.Now())
+
 	switch alertName {
 	case "DNSResolutionFailed", "DNSLatencyHigh":
 		remediateDNS()
@@ -82,84 +103,4 @@ func handleAlert(alertName string, alert Alert) {
 	default:
 		log.Printf("Unknown alert received: %s", alertName)
 	}
-}
-
-func remediateDNS() {
-	log.Println("Remediating DNS: Restarting CoreDNS pods...")
-	ctx := context.Background()
-	pods, err := clientset.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
-		LabelSelector: "k8s-app=kube-dns",
-	})
-	if err != nil {
-		log.Printf("Failed to list CoreDNS pods: %v", err)
-		return
-	}
-
-	for _, pod := range pods.Items {
-		log.Printf("Deleting CoreDNS pod %s", pod.Name)
-		err = clientset.CoreV1().Pods("kube-system").Delete(ctx, pod.Name, metav1.DeleteOptions{})
-		if err != nil {
-			log.Printf("Failed to delete pod %s: %v", pod.Name, err)
-		}
-	}
-
-	log.Println("Deploying Backup DNS Fallback...")
-	deployBackupDNS()
-}
-
-func deployBackupDNS() {
-	log.Println("Applying fallback DNS configurations (simulated)")
-}
-
-func remediateNetworkPolicy() {
-	log.Println("Remediating NetworkPolicy: Removing blocking policies...")
-	ctx := context.Background()
-	
-	namespaces := []string{"test-namespace-1", "test-namespace-2"}
-	for _, ns := range namespaces {
-		policies, err := clientset.NetworkingV1().NetworkPolicies(ns).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			log.Printf("Failed to list NetworkPolicies in %s: %v", ns, err)
-			continue
-		}
-		
-		for _, policy := range policies.Items {
-			log.Printf("Deleting NetworkPolicy %s in %s", policy.Name, ns)
-			err = clientset.NetworkingV1().NetworkPolicies(ns).Delete(ctx, policy.Name, metav1.DeleteOptions{})
-			if err != nil {
-				log.Printf("Failed to delete NetworkPolicy %s: %v", policy.Name, err)
-			}
-		}
-	}
-}
-
-func remediateCNI() {
-	log.Println("Remediating CNI: Restarting CNI node pods (Calico / Flannel)...")
-	ctx := context.Background()
-
-	// 1. Check Calico
-	calicoPods, err := clientset.CoreV1().Pods("calico-system").List(ctx, metav1.ListOptions{
-		LabelSelector: "k8s-app=calico-node",
-	})
-	if err == nil && len(calicoPods.Items) > 0 {
-		for _, pod := range calicoPods.Items {
-			log.Printf("Deleting Calico pod %s in calico-system", pod.Name)
-			_ = clientset.CoreV1().Pods("calico-system").Delete(ctx, pod.Name, metav1.DeleteOptions{})
-		}
-		return
-	}
-
-	// 2. Check Flannel
-	flannelPods, err := clientset.CoreV1().Pods("kube-flannel").List(ctx, metav1.ListOptions{
-		LabelSelector: "app=flannel",
-	})
-	if err == nil && len(flannelPods.Items) > 0 {
-		for _, pod := range flannelPods.Items {
-			log.Printf("Deleting Flannel pod %s in kube-flannel", pod.Name)
-			_ = clientset.CoreV1().Pods("kube-flannel").Delete(ctx, pod.Name, metav1.DeleteOptions{})
-		}
-		return
-	}
-
-	log.Println("No active Calico or Flannel pods found to remediate.")
 }
