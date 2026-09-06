@@ -31,6 +31,7 @@ To prevent merge conflicts, each developer works in strictly isolated directorie
 **Owned Scope**: `operator-go/`, `manifests/operator.yaml`
 
 ### Key Responsibilities:
+
 1. **Anti-Flap & Cooldown Mechanism (`operator-go/main.go`)**:
    - Implement an in-memory thread-safe cooldown cache (`sync.Map` or mutex-guarded map).
    - Prevent repeat remediations (e.g. restart loops) on the same target within 60 seconds of a previous action.
@@ -52,6 +53,7 @@ To prevent merge conflicts, each developer works in strictly isolated directorie
 **Owned Scope**: `probes/`, `manifests/monitoring/`, `manifests/probes.yaml`, `fault-injection/`
 
 ### Key Responsibilities:
+
 1. **Probe Container Build & Verification**:
    - Build and test the probe container image:
      ```bash
@@ -101,6 +103,7 @@ Neither developer needs to wait for the other. The interface is strictly governe
 ```
 
 ### Supported `alertname` values:
+
 - `DNSResolutionFailed` / `DNSLatencyHigh` $\rightarrow$ triggers `remediateDNS()`
 - `PodConnectivityBlocked` $\rightarrow$ triggers `remediateNetworkPolicy()`
 - `CNIPodCrash` $\rightarrow$ triggers `remediateCNI()`
@@ -110,6 +113,7 @@ Neither developer needs to wait for the other. The interface is strictly governe
 ## 5. Git Workflow to Guarantee Zero Conflicts
 
 ### Step 1: Create Independent Branches
+
 Both developers branch off `gobuild`:
 
 ```bash
@@ -125,11 +129,14 @@ git checkout -b feature/dev2-monitoring-probes
 ```
 
 ### Step 2: Work & Commit Strictly Within Assigned Folders
+
 - Dev 1 **only** modifies files in `operator-go/` and `manifests/operator.yaml`.
 - Dev 2 **only** modifies files in `probes/`, `manifests/monitoring/`, `manifests/probes.yaml`, and `fault-injection/`.
 
 ### Step 3: Clean Merge Back to `gobuild`
+
 Because the file sets are completely disjoint:
+
 1. **Developer 1 merges first**:
    ```bash
    git checkout gobuild
@@ -144,13 +151,14 @@ Because the file sets are completely disjoint:
    git merge feature/dev2-monitoring-probes
    git push origin gobuild
    ```
-*(Result: Fast-forward or 100% clean merge with zero conflicts).*
+   _(Result: Fast-forward or 100% clean merge with zero conflicts)._
 
 ---
 
 ## 6. Joint End-to-End Verification Checkpoint
 
 Once both branches are merged into `gobuild`:
+
 1. Start KIND cluster: `.\cluster-setup.ps1`
 2. Deploy probes: `kubectl apply -f manifests/probes.yaml`
 3. Apply monitoring & alerts: `kubectl apply -f manifests/monitoring/`
