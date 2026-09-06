@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 )
 
 // Dummy init for tests
@@ -73,7 +72,7 @@ func TestCooldownMechanism(t *testing.T) {
 
 	// First trigger - should process
 	handleAlert("TestCooldownAlert", alert)
-	
+
 	if _, ok := cooldownCache.Load("TestCooldownAlert"); !ok {
 		t.Errorf("Alert was not added to cooldown cache")
 	}
@@ -81,6 +80,6 @@ func TestCooldownMechanism(t *testing.T) {
 	// Second trigger immediately - should be in cooldown (test won't panic or error, just logs)
 	handleAlert("TestCooldownAlert", alert)
 
-	// Since handleAlert doesn't return anything, we just verify it doesn't crash 
+	// Since handleAlert doesn't return anything, we just verify it doesn't crash
 	// and respects the cache via logs or code coverage.
 }
