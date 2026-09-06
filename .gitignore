@@ -1,0 +1,25 @@
+# Binaries & Executables
+*.exe
+*.dll
+*.so
+*.dylib
+bin/
+
+# Go build artifacts
+operator-go/operator-go
+operator-go/operator-go.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+venv/
+.venv/
+env/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*~

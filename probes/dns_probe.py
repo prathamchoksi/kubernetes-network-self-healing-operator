@@ -184,23 +184,6 @@ class DNSProbe:
             raise
 
 
-def create_test_dns_failure():
-    """
-    Simulate DNS failure by killing CoreDNS pod.
-    Used for testing probe detection.
-    """
-    logger.info("Creating DNS test failure: killing CoreDNS pod")
-    try:
-        cmd = [
-            "kubectl", "delete", "pod", "-n", "kube-system",
-            "-l", "k8s-app=kube-dns", "--grace-period=0"
-        ]
-        subprocess.run(cmd, check=True)
-        logger.info("CoreDNS pod killed")
-    except Exception as e:
-        logger.error(f"Failed to kill CoreDNS pod: {e}")
-
-
 if __name__ == "__main__":
     probe = DNSProbe(interval_seconds=10)
     probe.run()

@@ -203,51 +203,6 @@ class ConnectivityProbe:
             raise
 
 
-def apply_bad_network_policy(namespace: str, policy_name: str = "block-all"):
-    """
-    Create a NetworkPolicy that blocks all traffic (for testing).
-    Simulates a misconfigured NetworkPolicy.
-    """
-    logger.info(f"Creating blocking NetworkPolicy in {namespace}")
-    
-    policy_yaml = f"""
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {policy_name}
-  namespace: {namespace}
-spec:
-  podSelector: {{}}
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress: []
-  egress: []
-"""
-    
-    try:
-        # Use kubectl apply to create the policy
-        cmd = ["kubectl", "apply", "-f", "-"]
-        subprocess.run(cmd, input=policy_yaml, text=True, check=True)
-        logger.info(f"NetworkPolicy {policy_name} applied")
-    except Exception as e:
-        logger.error(f"Failed to apply NetworkPolicy: {e}")
-
-
-def remove_bad_network_policy(namespace: str, policy_name: str = "block-all"):
-    """
-    Remove a blocking NetworkPolicy (for recovery).
-    """
-    logger.info(f"Removing NetworkPolicy {policy_name} from {namespace}")
-    
-    try:
-        cmd = ["kubectl", "delete", "networkpolicy", policy_name, "-n", namespace]
-        subprocess.run(cmd, check=True)
-        logger.info(f"NetworkPolicy {policy_name} removed")
-    except Exception as e:
-        logger.error(f"Failed to remove NetworkPolicy: {e}")
-
-
 if __name__ == "__main__":
     probe = ConnectivityProbe(interval_seconds=15)
     probe.run()

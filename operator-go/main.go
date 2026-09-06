@@ -3,12 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -136,21 +134,32 @@ func remediateNetworkPolicy() {
 }
 
 func remediateCNI() {
-	log.Println("Remediating CNI: Restarting Calico node pods...")
+	log.Println("Remediating CNI: Restarting CNI node pods (Calico / Flannel)...")
 	ctx := context.Background()
-	pods, err := clientset.CoreV1().Pods("calico-system").List(ctx, metav1.ListOptions{
+
+	// 1. Check Calico
+	calicoPods, err := clientset.CoreV1().Pods("calico-system").List(ctx, metav1.ListOptions{
 		LabelSelector: "k8s-app=calico-node",
 	})
-	if err != nil {
-		log.Printf("Failed to list Calico node pods: %v", err)
+	if err == nil && len(calicoPods.Items) > 0 {
+		for _, pod := range calicoPods.Items {
+			log.Printf("Deleting Calico pod %s in calico-system", pod.Name)
+			_ = clientset.CoreV1().Pods("calico-system").Delete(ctx, pod.Name, metav1.DeleteOptions{})
+		}
 		return
 	}
 
-	for _, pod := range pods.Items {
-		log.Printf("Deleting Calico pod %s", pod.Name)
-		err = clientset.CoreV1().Pods("calico-system").Delete(ctx, pod.Name, metav1.DeleteOptions{})
-		if err != nil {
-			log.Printf("Failed to delete pod %s: %v", pod.Name, err)
+	// 2. Check Flannel
+	flannelPods, err := clientset.CoreV1().Pods("kube-flannel").List(ctx, metav1.ListOptions{
+		LabelSelector: "app=flannel",
+	})
+	if err == nil && len(flannelPods.Items) > 0 {
+		for _, pod := range flannelPods.Items {
+			log.Printf("Deleting Flannel pod %s in kube-flannel", pod.Name)
+			_ = clientset.CoreV1().Pods("kube-flannel").Delete(ctx, pod.Name, metav1.DeleteOptions{})
 		}
+		return
 	}
+
+	log.Println("No active Calico or Flannel pods found to remediate.")
 }

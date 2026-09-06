@@ -50,11 +50,11 @@ This project builds a custom Kubernetes operator and active probe monitoring sys
                                v (HTTP POST /webhook)
           +-----------------------------------------+
           |      Network Self-Healing Operator      |
-          |           (Python + Kopf)               |
-          | - Event Watchers (CoreDNS, CNI pods)    |
-          | - Alertmanager Webhook Receiver         |
-          | - Cooldown & Anti-Flap Management       |
+          |           (Go + client-go)              |
+          | - Alertmanager Webhook Receiver (:8080) |
+          | - Active Alert Dispatcher               |
           | - Kubernetes API Remediation Actions    |
+          | - Multi-CNI Remediation (Calico/Flannel)|
           +--------------------+--------------------+
                                |
         +----------------------+----------------------+
@@ -108,11 +108,11 @@ This project builds a custom Kubernetes operator and active probe monitoring sys
 
 ### Phase 5: Operator Enhancements & Remediations
 
-1. **Alertmanager Webhook Listener (`operator/operator.py`)**:
-   - Run an internal lightweight HTTP server (e.g. threading HTTP server or Flask) listening for Alertmanager alert payloads.
+1. **Alertmanager Webhook Listener (`operator-go/main.go`)**:
+   - HTTP server listening on `:8080/webhook` for Alertmanager alert payloads.
 2. **Remediation Handlers**:
-   - **CoreDNS Crash / High Latency**: Delete failed/high-latency CoreDNS pods to force clean restarts.
-   - **CNI Pod Failure**: Evict/restart the crashing CNI pod in `calico-system` or `kube-flannel`.
+   - **CoreDNS Crash / High Latency**: Delete failed/high-latency CoreDNS pods to trigger ReplicaSet/DaemonSet restarts.
+   - **CNI Pod Failure**: Remediates crashing CNI node pods across both `calico-system` (Calico) and `kube-flannel` (Flannel).
    - **Broken NetworkPolicy**: Detect blocking policy (`block-all-ingress` or faulty ingress/egress rules) and automatically delete/restore the baseline configuration.
 3. **Anti-Flap & Cooldown**:
    - Ensure an exponential backoff or 60-second cooldown per target to prevent thrashing restart loops.
