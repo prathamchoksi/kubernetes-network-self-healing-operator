@@ -11,18 +11,24 @@ A custom Kubernetes operator that automatically detects and remediates networkin
 
 ```
 .
-├── Project_details.md          # Full project specification and plan
+├── IMPLEMENTATION_PLAN.md      # Full architecture and implementation plan
+├── Project_details.md          # Project specification
 ├── kind-config.yaml            # KIND cluster configuration
-├── cluster-setup.ps1           # Automates cluster creation
+├── cluster-setup.ps1           # Automates cluster creation (Calico / Flannel)
 ├── install-tools.ps1           # Installs Docker, KIND, kubectl
 ├── manifests/
-│   ├── calico.yaml             # Calico CNI references
-│   └── test-app/
-│       └── test-app.yaml       # Test pods and services
-├── operator/
-│   ├── operator.py             # kopf handlers (to be built)
-│   └── crd.yaml                # Optional CRD (to be built)
+│   ├── calico-custom-resources.yaml
+│   ├── test-app/
+│   │   └── test-app.yaml       # Test pods and services
+│   ├── monitoring/             # Prometheus rules, Alertmanager config, ServiceMonitors
+│   └── probes.yaml             # In-cluster probe deployments and RBAC
+├── operator-go/
+│   ├── go.mod
+│   ├── go.sum
+│   └── main.go                 # Go operator + Alertmanager webhook receiver (:8080)
 ├── probes/
+│   ├── Dockerfile
+│   ├── requirements.txt
 │   ├── dns_probe.py            # CoreDNS health checking
 │   └── connectivity_probe.py   # Pod-to-pod connectivity testing
 └── fault-injection/
@@ -136,10 +142,10 @@ kubectl exec -it curl-client-2 -n test-namespace-2 -- curl http://nginx-server-1
 ## Tech Stack
 
 - **Cluster**: KIND (Kubernetes in Docker)
-- **CNI**: Calico
-- **Operator Framework**: Python + kopf
-- **Monitoring**: Direct polling + K8s event watching
-- **Observability**: Grafana (optional)
+- **CNI**: Calico / Flannel (configurable)
+- **Operator**: Go (`client-go`) + Alertmanager Webhook Receiver
+- **Monitoring**: Prometheus + Alertmanager + Probes (HTTP metrics 8000/8001)
+- **Observability**: Grafana + Loki
 - **Fault Injection**: Bash + kubectl
 
 ## Documentation
