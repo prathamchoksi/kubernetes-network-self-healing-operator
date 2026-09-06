@@ -12,6 +12,10 @@ import subprocess
 import json
 from datetime import datetime
 from typing import Dict, List, Tuple
+from prometheus_client import start_http_server, Gauge
+
+CONN_LATENCY = Gauge('connectivity_latency_ms', 'Pod-to-Pod connectivity latency in ms', ['test_name'])
+CONN_SUCCESS = Gauge('connectivity_success', 'Pod-to-Pod connectivity success (1=yes, 0=no)', ['test_name'])
 
 logging.basicConfig(
     level=logging.INFO,
@@ -147,6 +151,10 @@ class ConnectivityProbe:
         logger.info(f"Starting connectivity probe (check every {self.interval}s)")
         logger.info(f"Test cases: {len(self.test_cases)}")
         
+        # Start Prometheus metrics server
+        start_http_server(8001)
+        logger.info("Prometheus metrics server started on port 8001")
+        
         try:
             while True:
                 logger.info("--- Connectivity Probe Check ---")
@@ -165,6 +173,10 @@ class ConnectivityProbe:
                     )
                     
                     self.results[test_case["name"]] = result
+                    
+                    # Update Prometheus metrics
+                    CONN_SUCCESS.labels(test_name=test_case["name"]).set(1 if result["success"] else 0)
+                    CONN_LATENCY.labels(test_name=test_case["name"]).set(result["response_time_ms"])
                     
                     if not result["success"]:
                         all_healthy = False

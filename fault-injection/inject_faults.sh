@@ -31,6 +31,7 @@ show_usage() {
     echo "  restart-coredns           - Trigger CoreDNS pod restart detection"
     echo "  apply-bad-policy          - Apply a NetworkPolicy that blocks all traffic"
     echo "  remove-bad-policy         - Remove the blocking NetworkPolicy"
+    echo "  kill-cni                  - Kill a Calico node pod"
     echo "  check-connectivity        - Test pod-to-pod connectivity"
     echo "  check-dns                 - Test DNS resolution"
     echo "  status                    - Show cluster and pod status"
@@ -102,6 +103,32 @@ remove_bad_policy() {
     
     echo -e "${GREEN}NetworkPolicy removed${NC}"
     echo "Traffic should be restored"
+    sleep 2
+}
+
+# Function: Kill CNI pod
+kill_cni() {
+    echo -e "${YELLOW}[Fault] Killing CNI pod...${NC}"
+    
+    # Try Calico first
+    POD=$(kubectl get pods -n calico-system -l k8s-app=calico-node -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    NS="calico-system"
+    
+    if [ -z "$POD" ]; then
+        # Try Flannel
+        POD=$(kubectl get pods -n kube-flannel -l app=flannel -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        NS="kube-flannel"
+    fi
+    
+    if [ -z "$POD" ]; then
+        echo -e "${RED}No CNI pod found${NC}"
+        return 1
+    fi
+    
+    echo "Deleting pod: $POD in namespace $NS"
+    kubectl delete pod $POD -n $NS --grace-period=0 --force 2>/dev/null || true
+    echo -e "${GREEN}Pod deleted${NC}"
+    echo "Kubernetes will automatically restart it..."
     sleep 2
 }
 
@@ -221,6 +248,20 @@ full_scenario() {
     echo -e "\n${GREEN}=== Full Scenario Complete ===${NC}"
 }
 
+# Function: Kill Calico CNI node pod
+kill_cni() {
+    echo -e "${YELLOW}[Fault] Killing Calico node pod...${NC}"
+    POD=$(kubectl get pods -n calico-system -l k8s-app=calico-node -o jsonpath='{.items[0].metadata.name}')
+    if [ -z "$POD" ]; then
+        echo -e "${RED}No Calico node pod found${NC}"
+        return 1
+    fi
+    echo "Deleting pod: $POD"
+    kubectl delete pod $POD -n calico-system --grace-period=0 --force 2>/dev/null || true
+    echo -e "${GREEN}Pod deleted${NC}"
+    echo "Kubernetes should eventually try to restart it if managed by DaemonSet..."
+}
+
 # Parse arguments
 FAULT_TYPE="${1:-}"
 
@@ -236,6 +277,9 @@ case "$FAULT_TYPE" in
         ;;
     remove-bad-policy)
         remove_bad_policy
+        ;;
+    kill-cni)
+        kill_cni
         ;;
     check-connectivity)
         check_connectivity

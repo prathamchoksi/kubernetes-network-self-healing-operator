@@ -11,6 +11,10 @@ import subprocess
 import json
 from datetime import datetime
 from typing import Dict, List
+from prometheus_client import start_http_server, Gauge
+
+DNS_LATENCY = Gauge('dns_latency_ms', 'DNS resolution latency in milliseconds')
+DNS_HEALTHY = Gauge('dns_healthy', 'DNS resolution health status (1 = healthy, 0 = unhealthy)')
 
 logging.basicConfig(
     level=logging.INFO,
@@ -137,6 +141,10 @@ class DNSProbe:
         """
         logger.info(f"Starting DNS probe (check every {self.interval}s)")
         
+        # Start Prometheus metrics server
+        start_http_server(8000)
+        logger.info("Prometheus metrics server started on port 8000")
+        
         try:
             while True:
                 logger.info("--- DNS Probe Check ---")
@@ -158,6 +166,10 @@ class DNSProbe:
                     "dns_success": dns_result.get("success", False),
                     "error_message": dns_result.get("error") or pod_result.get("error")
                 }
+                
+                # Update Prometheus metrics
+                DNS_LATENCY.set(self.results["latency_ms"])
+                DNS_HEALTHY.set(1 if self.results["healthy"] else 0)
                 
                 # Log summary
                 status = "HEALTHY" if self.results["healthy"] else "UNHEALTHY"
