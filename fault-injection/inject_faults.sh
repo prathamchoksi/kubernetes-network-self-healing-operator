@@ -2,7 +2,7 @@
 # Kubernetes Network Self-Healing Operator - Fault Injection Script
 # Simulates networking failures for testing the operator's remediation capabilities
 
-set -e
+# Note: set -e is deliberately omitted so expected fault failures (e.g. blocked curl) do not abort the test runner.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
