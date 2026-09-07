@@ -12,6 +12,10 @@ import subprocess
 import json
 from datetime import datetime
 from typing import Dict, List, Tuple
+from prometheus_client import start_http_server, Gauge
+
+CONN_LATENCY = Gauge('connectivity_latency_ms', 'Pod-to-Pod connectivity latency in ms', ['test_name'])
+CONN_SUCCESS = Gauge('connectivity_success', 'Pod-to-Pod connectivity success (1=yes, 0=no)', ['test_name'])
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,10 +70,10 @@ class ConnectivityProbe:
         target_url = f"http://{target_service}.{target_ns}.svc.cluster.local:{target_port}/"
         
         try:
-            # Build kubectl exec command with curl
+            # Build kubectl exec command with curl (suppress body with -o /dev/null)
             cmd = [
                 "kubectl", "exec", source_pod, "-n", source_ns, "--",
-                "curl", "-s", "-w", "%{http_code}", "-m", str(timeout), target_url
+                "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-m", str(timeout), target_url
             ]
             
             import time as time_module
@@ -78,7 +82,7 @@ class ConnectivityProbe:
             elapsed = (time_module.perf_counter() - start) * 1000  # ms
             
             # Parse response
-            http_code = output[-3:] if len(output) >= 3 else "000"
+            http_code = output.strip()[-3:] if len(output.strip()) >= 3 else "000"
             result["http_code"] = http_code
             result["response_time_ms"] = elapsed
             result["success"] = http_code.startswith("2") or http_code.startswith("3")
@@ -147,6 +151,10 @@ class ConnectivityProbe:
         logger.info(f"Starting connectivity probe (check every {self.interval}s)")
         logger.info(f"Test cases: {len(self.test_cases)}")
         
+        # Start Prometheus metrics server
+        start_http_server(8001)
+        logger.info("Prometheus metrics server started on port 8001")
+        
         try:
             while True:
                 logger.info("--- Connectivity Probe Check ---")
@@ -165,6 +173,10 @@ class ConnectivityProbe:
                     )
                     
                     self.results[test_case["name"]] = result
+                    
+                    # Update Prometheus metrics
+                    CONN_SUCCESS.labels(test_name=test_case["name"]).set(1 if result["success"] else 0)
+                    CONN_LATENCY.labels(test_name=test_case["name"]).set(result["response_time_ms"])
                     
                     if not result["success"]:
                         all_healthy = False
@@ -189,51 +201,6 @@ class ConnectivityProbe:
         except Exception as e:
             logger.error(f"Connectivity probe crashed: {e}")
             raise
-
-
-def apply_bad_network_policy(namespace: str, policy_name: str = "block-all"):
-    """
-    Create a NetworkPolicy that blocks all traffic (for testing).
-    Simulates a misconfigured NetworkPolicy.
-    """
-    logger.info(f"Creating blocking NetworkPolicy in {namespace}")
-    
-    policy_yaml = f"""
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {policy_name}
-  namespace: {namespace}
-spec:
-  podSelector: {{}}
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress: []
-  egress: []
-"""
-    
-    try:
-        # Use kubectl apply to create the policy
-        cmd = ["kubectl", "apply", "-f", "-"]
-        subprocess.run(cmd, input=policy_yaml, text=True, check=True)
-        logger.info(f"NetworkPolicy {policy_name} applied")
-    except Exception as e:
-        logger.error(f"Failed to apply NetworkPolicy: {e}")
-
-
-def remove_bad_network_policy(namespace: str, policy_name: str = "block-all"):
-    """
-    Remove a blocking NetworkPolicy (for recovery).
-    """
-    logger.info(f"Removing NetworkPolicy {policy_name} from {namespace}")
-    
-    try:
-        cmd = ["kubectl", "delete", "networkpolicy", policy_name, "-n", namespace]
-        subprocess.run(cmd, check=True)
-        logger.info(f"NetworkPolicy {policy_name} removed")
-    except Exception as e:
-        logger.error(f"Failed to remove NetworkPolicy: {e}")
 
 
 if __name__ == "__main__":

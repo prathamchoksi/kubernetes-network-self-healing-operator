@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: webhook-config
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  route:
+    receiver: operator-webhook
+    groupBy: ["alertname"]
+    groupWait: 10s
+    groupInterval: 1m
+    repeatInterval: 5m
+  receivers:
+    - name: operator-webhook
+      webhookConfigs:
+        # Use host.docker.internal:8080 for local operator development (go run .)
+        # Use http://network-operator-webhook.kube-system.svc:8080/webhook when operator is deployed in-cluster
+        - url: http://host.docker.internal:8080/webhook
+          sendResolved: false

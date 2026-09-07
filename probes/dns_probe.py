@@ -11,6 +11,10 @@ import subprocess
 import json
 from datetime import datetime
 from typing import Dict, List
+from prometheus_client import start_http_server, Gauge
+
+DNS_LATENCY = Gauge('dns_latency_ms', 'DNS resolution latency in milliseconds')
+DNS_HEALTHY = Gauge('dns_healthy', 'DNS resolution health status (1 = healthy, 0 = unhealthy)')
 
 logging.basicConfig(
     level=logging.INFO,
@@ -137,6 +141,10 @@ class DNSProbe:
         """
         logger.info(f"Starting DNS probe (check every {self.interval}s)")
         
+        # Start Prometheus metrics server
+        start_http_server(8000)
+        logger.info("Prometheus metrics server started on port 8000")
+        
         try:
             while True:
                 logger.info("--- DNS Probe Check ---")
@@ -159,6 +167,10 @@ class DNSProbe:
                     "error_message": dns_result.get("error") or pod_result.get("error")
                 }
                 
+                # Update Prometheus metrics
+                DNS_LATENCY.set(self.results["latency_ms"])
+                DNS_HEALTHY.set(1 if self.results["healthy"] else 0)
+                
                 # Log summary
                 status = "HEALTHY" if self.results["healthy"] else "UNHEALTHY"
                 logger.info(f"Probe result: {status} | Latency: {self.results['latency_ms']:.2f}ms | Pod: {pod_result.get('phase', 'Unknown')}")
@@ -170,23 +182,6 @@ class DNSProbe:
         except Exception as e:
             logger.error(f"DNS probe crashed: {e}")
             raise
-
-
-def create_test_dns_failure():
-    """
-    Simulate DNS failure by killing CoreDNS pod.
-    Used for testing probe detection.
-    """
-    logger.info("Creating DNS test failure: killing CoreDNS pod")
-    try:
-        cmd = [
-            "kubectl", "delete", "pod", "-n", "kube-system",
-            "-l", "k8s-app=kube-dns", "--grace-period=0"
-        ]
-        subprocess.run(cmd, check=True)
-        logger.info("CoreDNS pod killed")
-    except Exception as e:
-        logger.error(f"Failed to kill CoreDNS pod: {e}")
 
 
 if __name__ == "__main__":
