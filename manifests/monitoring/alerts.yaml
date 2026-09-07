@@ -11,7 +11,7 @@ spec:
       rules:
         - alert: DNSResolutionFailed
           expr: dns_healthy == 0
-          for: 30s
+          for: 15s
           labels:
             severity: critical
             component: dns
@@ -19,15 +19,15 @@ spec:
             summary: "DNS resolution is failing"
         - alert: DNSLatencyHigh
           expr: dns_latency_ms > 100
-          for: 1m
+          for: 30s
           labels:
             severity: warning
             component: dns
           annotations:
-            summary: "DNS latency is high"
+            summary: "DNS latency is high (>100ms)"
         - alert: PodConnectivityBlocked
           expr: connectivity_success == 0
-          for: 30s
+          for: 15s
           labels:
             severity: critical
             component: networkpolicy
@@ -36,10 +36,10 @@ spec:
         - alert: CNIPodCrash
           expr: >
             kube_pod_status_phase{namespace="calico-system", phase="Failed"} > 0 or 
-            kube_pod_container_status_restarts_total{namespace="calico-system"} > 3 or
+            increase(kube_pod_container_status_restarts_total{namespace="calico-system"}[5m]) > 0 or
             kube_pod_status_phase{namespace="kube-flannel", phase="Failed"} > 0 or 
-            kube_pod_container_status_restarts_total{namespace="kube-flannel"} > 3
-          for: 1m
+            increase(kube_pod_container_status_restarts_total{namespace="kube-flannel"}[5m]) > 0
+          for: 15s
           labels:
             severity: critical
             component: cni

@@ -14,7 +14,7 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroup: ""
     resources: ["pods/exec"]
-    verbs: ["create"]
+    verbs: ["create", "get"]
   - apiGroup: "networking.k8s.io"
     resources: ["networkpolicies"]
     verbs: ["get", "list", "watch"]

@@ -13,7 +13,9 @@ spec:
     groupInterval: 1m
     repeatInterval: 5m
   receivers:
-  - name: operator-webhook
-    webhookConfigs:
-    - url: http://host.docker.internal:8080/webhook
-      sendResolved: false
+    - name: operator-webhook
+      webhookConfigs:
+        # Use host.docker.internal:8080 for local operator development (go run .)
+        # Use http://network-healing-operator.monitoring.svc:8080/webhook when operator is deployed in-cluster
+        - url: http://host.docker.internal:8080/webhook
+          sendResolved: false

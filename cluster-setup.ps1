@@ -106,10 +106,10 @@ helm repo update
 # Install kube-prometheus-stack (Prometheus + Alertmanager)
 helm upgrade --install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --set alertmanager.enabled=true --set grafana.enabled=false
 
-# Install Loki stack (Loki + Promtail + Grafana)
-helm upgrade --install loki grafana/loki-stack --namespace monitoring --create-namespace --set grafana.enabled=true,prometheus.enabled=true,prometheus.isDefault=false,prometheus.url=http://prometheus-kube-prometheus-prometheus.monitoring:9090
+# Install Loki stack (Loki + Promtail + Grafana with dashboard sidecar enabled)
+helm upgrade --install loki grafana/loki-stack --namespace monitoring --create-namespace --set grafana.enabled=true,grafana.sidecar.dashboards.enabled=true,prometheus.enabled=true,prometheus.isDefault=false,prometheus.url=http://prometheus-kube-prometheus-prometheus.monitoring:9090
 
 Write-Host "`n=== CLUSTER READY ===" -ForegroundColor Green
 Write-Host "Cluster: $ClusterName"
 Write-Host "Nodes: 3 (1 control-plane, 2 workers)"
-Write-Host "CNI: Calico"
+Write-Host "CNI: $CNI"

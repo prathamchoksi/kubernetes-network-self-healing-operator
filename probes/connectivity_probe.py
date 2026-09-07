@@ -70,10 +70,10 @@ class ConnectivityProbe:
         target_url = f"http://{target_service}.{target_ns}.svc.cluster.local:{target_port}/"
         
         try:
-            # Build kubectl exec command with curl
+            # Build kubectl exec command with curl (suppress body with -o /dev/null)
             cmd = [
                 "kubectl", "exec", source_pod, "-n", source_ns, "--",
-                "curl", "-s", "-w", "%{http_code}", "-m", str(timeout), target_url
+                "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-m", str(timeout), target_url
             ]
             
             import time as time_module
@@ -82,7 +82,7 @@ class ConnectivityProbe:
             elapsed = (time_module.perf_counter() - start) * 1000  # ms
             
             # Parse response
-            http_code = output[-3:] if len(output) >= 3 else "000"
+            http_code = output.strip()[-3:] if len(output.strip()) >= 3 else "000"
             result["http_code"] = http_code
             result["response_time_ms"] = elapsed
             result["success"] = http_code.startswith("2") or http_code.startswith("3")
