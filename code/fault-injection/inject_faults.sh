@@ -76,6 +76,9 @@ apply_bad_policy() {
     # Create namespace if needed
     kubectl create namespace test-namespace-1 --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1 || true
     
+    # Remove any existing allow-all policy so blocking takes effect
+    kubectl delete networkpolicy baseline-allow-all -n test-namespace-1 2>/dev/null || true
+    
     # Apply NetworkPolicy that blocks all traffic
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.k8s.io/v1
@@ -108,27 +111,28 @@ remove_bad_policy() {
 
 # Function: Kill CNI pod
 kill_cni() {
-    echo -e "${YELLOW}[Fault] Killing CNI pod...${NC}"
+    echo -e "${YELLOW}[Fault] Triggering CNI container crash/restart...${NC}"
     
-    # Try Calico first
-    POD=$(kubectl get pods -n calico-system -l k8s-app=calico-node -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    # Select a Running Calico pod
+    POD=$(kubectl get pods -n calico-system -l k8s-app=calico-node --field-selector status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
     NS="calico-system"
+    CONTAINER="calico-node"
     
     if [ -z "$POD" ]; then
         # Try Flannel
-        POD=$(kubectl get pods -n kube-flannel -l app=flannel -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        POD=$(kubectl get pods -n kube-flannel -l app=flannel --field-selector status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
         NS="kube-flannel"
+        CONTAINER="kube-flannel"
     fi
     
     if [ -z "$POD" ]; then
-        echo -e "${RED}No CNI pod found${NC}"
+        echo -e "${RED}No running CNI pod found${NC}"
         return 1
     fi
     
-    echo "Deleting pod: $POD in namespace $NS"
-    kubectl delete pod $POD -n $NS --grace-period=0 --force 2>/dev/null || true
-    echo -e "${GREEN}Pod deleted${NC}"
-    echo "Kubernetes will automatically restart it..."
+    echo "Killing main process inside pod: $POD ($NS)"
+    kubectl exec $POD -n $NS -c $CONTAINER -- kill 1 2>/dev/null || true
+    echo -e "${GREEN}Container process killed. Kubelet is restarting the container...${NC}"
     sleep 2
 }
 
