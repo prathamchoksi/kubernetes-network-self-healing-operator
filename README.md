@@ -1,211 +1,345 @@
 # Kubernetes Network Self-Healing Operator
 
-A custom Kubernetes operator that automatically detects and remediates networking failures:
+A custom Kubernetes operator built in Go that automatically detects and remediates network-level failures in real-time:
 
-- CoreDNS health monitoring with auto-restart
-- NetworkPolicy reachability detection with policy reapplication
-- Fault injection scripts for testing
+- **CoreDNS Health Monitoring**: Detects DNS resolution failures and latency spikes, triggering automated recovery.
+- **NetworkPolicy Reachability Detection**: Detects blocked cross-namespace pod-to-pod communication and automatically restores baseline NetworkPolicies.
+- **CNI Node Health Tracking**: Monitors Calico / Flannel pod container restarts across cluster nodes.
+- **Full Observability Stack**: Integrated Prometheus rules, Alertmanager webhooks, Loki log aggregation, and Grafana real-time dashboards.
+- **Automated Fault Injection & Verification Suite**: Scripts for testing self-healing loops end-to-end.
 
-**Team**: 5 people | **Deadline**: Tuesday (~3 days)
+---
+
+## System Architecture
+
+```
+                                  +---------------------------------------+
+                                  |    Grafana + Loki Observability       |
+                                  |  (Dashboards & Remediation Logs)      |
+                                  +-------------------+-------------------+
+                                                      ^
+                                                      | Metrics & Logs
++----------------------------+    Metrics    +--------+-------------------+
+| Custom Python Probes       | ------------> | Prometheus + Alertmanager  |
+| (dns-probe & connectivity) |               | (ServiceMonitors & Rules) |
++----------------------------+               +-------------------+-------+
+                                                                 |
+                                                                 | Webhook Alert HTTP POST (:8080)
+                                                                 v
++----------------------------+  K8s API Calls  +-----------------+-------+
+|  Test Workloads / Network  | <-------------- |   Go Self-Healing      |
+| (nginx, curl, NetPolicies) |                 |   Operator             |
++----------------------------+                 +-------------------------+
+```
+
+---
 
 ## Project Structure
 
 ```
 .
-├── AI_Used/                    # Documentation on AI contributions and setup
+├── AI_Used/                    # Documentation on setup and development process
 │   ├── IMPLEMENTATION_PLAN.md
 │   ├── Project_details.md
 │   └── SETUP_SUMMARY.md
-├── code/                       # Main source code folder
-│   ├── kind-config.yaml            # KIND cluster configuration
-│   ├── cluster-setup.ps1           # Automates cluster creation (Calico / Flannel)
-│   ├── install-tools.ps1           # Installs Docker, KIND, kubectl, helm
-│   ├── manifests/
-│   │   ├── calico-custom-resources.yaml
-│   │   ├── test-app/
-│   │   │   └── test-app.yaml       # Test pods and services
-│   │   ├── monitoring/             # Prometheus rules, Alertmanager config, ServiceMonitors
-│   │   └── probes.yaml             # In-cluster probe deployments and RBAC
-│   ├── operator-go/
-│   │   ├── go.mod
-│   │   ├── go.sum
-│   │   └── main.go                 # Go operator + Alertmanager webhook receiver (:8080)
-│   ├── probes/
-│   │   ├── Dockerfile
-│   │   ├── requirements.txt
-│   │   ├── dns_probe.py            # CoreDNS health checking
-│   │   └── connectivity_probe.py   # Pod-to-pod connectivity testing
-│   └── fault-injection/
-│       └── inject_faults.sh        # Fault injection scripts
+└── code/                       # Source code directory
+    ├── kind-config.yaml            # KIND 3-node cluster configuration (1 control-plane, 2 workers)
+    ├── cluster-setup.ps1           # Automated cluster setup script (Calico/Flannel + Monitoring)
+    ├── install-tools.ps1           # Tool installer (Docker, KIND, kubectl, helm)
+    ├── manifests/
+    │   ├── calico-custom-resources.yaml
+    │   ├── operator.yaml           # Deployment and RBAC for Go network operator
+    │   ├── probes.yaml             # Deployment and RBAC for Python metrics probes
+    │   ├── test-app/
+    │   │   └── test-app.yaml       # Test workloads (nginx-server-1, curl-client-1/2)
+    │   └── monitoring/             # Monitoring stack resources
+    │       ├── alertmanager-config.yaml  # Webhook receiver config (:8080)
+    │       ├── alerts.yaml               # Prometheus alert rules
+    │       ├── grafana-dashboards.yaml   # Pre-configured Grafana dashboard ConfigMap
+    │       └── service-monitors.yaml     # Scrape targets for custom probes
+    ├── operator-go/
+    │   ├── main.go                 # Go operator entrypoint & HTTP webhook receiver (:8080)
+    │   ├── main_test.go            # Go unit tests
+    │   └── remediation.go          # K8s API remediation logic (NetworkPolicy, DNS, CNI)
+    ├── probes/
+    │   ├── Dockerfile
+    │   ├── requirements.txt
+    │   ├── dns_probe.py            # CoreDNS health probe (exposes port 8000)
+    │   └── connectivity_probe.py   # Pod-to-pod connectivity probe (exposes port 8001)
+    └── fault-injection/
+        └── inject_faults.sh        # Fault injection & automated E2E test runner
 ```
 
-## Quick Start
+---
 
-### Step 0: Environment Setup
+## Quick Start & Setup Guide
 
-**Windows users**: Run as Administrator
+### Step 1: Environment Setup
+
+Run PowerShell as **Administrator**:
 
 ```powershell
-# 1. Install tools (kubectl, KIND, Docker, Helm)
 cd code
 .\install-tools.ps1
+```
 
-# 2. For Docker Desktop, download and install manually:
-# https://www.docker.com/products/docker-desktop
+Verify required tools:
 
-# 3. Restart PowerShell to update PATH
-
-# 4. Verify installation:
+```powershell
 docker --version
 kubectl version --client
 kind version
 helm version
 ```
 
-### Step 1: Cluster Bring-up
+### Step 2: Cluster & Stack Bring-up
+
+Run the cluster setup script from the `code` directory:
 
 ```powershell
 cd code
 .\cluster-setup.ps1
 ```
 
-This will:
+This script automatically:
 
-1. Create a KIND cluster with 3 nodes (1 control-plane, 2 workers)
-2. Install Calico CNI (or Flannel) and monitoring stack (Prometheus, Alertmanager, Grafana, Loki)
-3. Deploy test apps (nginx server + curl clients)
+1. Creates a 3-node KIND cluster named `k8s-network-healing`.
+2. Installs Project Calico CNI.
+3. Deploys test applications (`nginx-server-1` in `test-namespace-1`, `curl-client-2` in `test-namespace-2`).
+4. Builds and loads probe and operator container images.
+5. Deploys `network-operator` and `network-probes`.
+6. Installs Prometheus, Alertmanager, Loki, and Grafana.
+7. Applies custom ServiceMonitors, Alerting Rules, Webhook configs, and Grafana Dashboards.
 
-**Checkpoint**:
+### Step 3: Accessing Grafana Dashboard
 
-- `kubectl get nodes` shows all Ready
-- `kubectl get pods -n calico-system` shows Calico Running
-- Test app pods are Running in test-namespace-1 and test-namespace-2
+To open Grafana in your web browser:
 
-### Step 2: Test Cluster Connectivity
-
-```powershell
-# Test pod-to-pod communication across namespaces
-kubectl exec -it curl-client-2 -n test-namespace-2 -- curl -v http://nginx-server-1.test-namespace-1
-
-# Should see: HTTP/1.1 200 OK
-```
-
-## Implementation Phases
-
-### Phase 1: Fault Injection (Step 2)
-
-Build scripts to simulate failures:
-
-- Kill CoreDNS pod
-- Apply broken NetworkPolicy
-
-**Location**: `fault-injection/inject_faults.sh`
-
-### Phase 2: Probes & Operator Skeleton (Step 3)
-
-Build independent components:
-
-- **Track A**: DNS probe - monitor CoreDNS latency/crashes
-- **Track B**: Connectivity probe - test pod-to-pod traffic
-- **Track C**: Operator skeleton - watch CoreDNS pod status
-
-**Location**: `probes/` and `operator-go/`
-
-### Phase 3: Remediation Loops (Steps 4-5)
-
-Wire together detection + fixes:
-
-- CoreDNS crash detection → auto-restart pod
-- Connectivity failure → reapply NetworkPolicy
-
-### Phase 4: Integration & Hardening (Step 6)
-
-Run both scenarios, fix edge cases
-
-### Phase 5: Observability & Demo (Steps 7-8)
-
-- Minimal Grafana dashboard (optional)
-- Record backup demo video
-- Write README and report
-
-## Key Commands
-
-```bash
-# Cluster management
-kind get clusters                                          # List clusters
-kind delete cluster --name k8s-network-healing            # Delete cluster
-
-# Kubernetes inspection
-kubectl get nodes                                          # Nodes status
-kubectl get pods --all-namespaces                         # All pods
-kubectl get pods -n calico-system                         # Calico CNI
-kubectl logs -f <pod-name> -n <namespace>                 # Pod logs
-kubectl exec -it <pod> -n <ns> -- /bin/sh                 # Pod shell
-
-# Test connectivity
-kubectl exec -it curl-client-2 -n test-namespace-2 -- curl http://nginx-server-1.test-namespace-1
-
-# Simulate faults (to be built in Step 2)
-./fault-injection/inject_faults.sh kill-coredns           # Kill CoreDNS
-./fault-injection/inject_faults.sh apply-bad-policy       # Bad NetworkPolicy
-```
-
-## Tech Stack
-
-- **Cluster**: KIND (Kubernetes in Docker)
-- **CNI**: Calico / Flannel (configurable)
-- **Operator**: Go (`client-go`) + Alertmanager Webhook Receiver
-- **Monitoring**: Prometheus + Alertmanager + Probes (HTTP metrics 8000/8001)
-- **Observability**: Grafana + Loki
-- **Fault Injection**: Bash + kubectl
-
-## Documentation
-
-- **[Project Details](./Project_details.md)** - Full specification, scope decisions, plan
-- **[Setup Summary](./SETUP_SUMMARY.md)** - Teammate setup and verification guide
-
-## Common Issues
-
-### Docker not found
-
-```powershell
-# Add Docker to PATH after installation, or
-# Download Docker Desktop manually from https://www.docker.com/products/docker-desktop
-```
-
-### kubectl cluster context
-
-```powershell
-# KIND automatically sets up kubeconfig, but you can verify:
-kubectl config current-context    # Should show: kind-k8s-network-healing
-```
-
-### Calico pods not starting
-
-```powershell
-# Wait a bit longer, or check logs:
-kubectl logs -n calico-system -l app=calico-node
-```
-
-## Status Checklist
-
-- [ ] Docker, KIND, kubectl installed
-- [ ] Python 3.10+ with kopf, kubernetes packages
-- [ ] KIND cluster up and Calico installed
-- [ ] Test app pods running in both namespaces
-- [ ] Connectivity test passes (curl across namespaces)
-- [ ] Fault injection scripts working
-- [ ] DNS probe detecting failures
-- [ ] Operator skeleton logging pod status
-- [ ] Connectivity probe detecting blocked traffic
-- [ ] CoreDNS remediation loop working
-- [ ] NetworkPolicy remediation loop working
-- [ ] All scenarios integrated and tested
-- [ ] Demo video recorded
-- [ ] README and report written
+1. **Port-Forward Grafana**:
+   ```powershell
+   kubectl port-forward -n monitoring svc/loki-grafana 3000:80
+   ```
+2. **Get Grafana Admin Password**:
+   In PowerShell:
+   ```powershell
+   [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String((kubectl get secret -n monitoring loki-grafana -o jsonpath="{.data.admin-password}")))
+   ```
+3. **Open Grafana**:
+   Navigating to `http://localhost:3000` in your browser.
+   - **Username**: `admin`
+   - **Password**: _(The decoded password from command above)_
+   - Go to **Dashboards** $\rightarrow$ **Kubernetes Network Self-Healing Overview**.
 
 ---
 
-**Last Updated**: Saturday, ~Day 1 of 3
-**Team Size**: 5
-**Deadline**: Tuesday
+## Testing & Verification Commands
+
+> **Note for Path Formats**:
+>
+> - In **Git Bash**: Always use forward slashes `/` (e.g. `./code/fault-injection/inject_faults.sh full-scenario`).
+> - In **PowerShell**: Use `bash .\code\fault-injection\inject_faults.sh full-scenario`.
+
+### 1. Automated Full Test Suite (E2E Integration Test)
+
+Run the full automated test scenario:
+
+**Git Bash**:
+
+```bash
+./code/fault-injection/inject_faults.sh full-scenario
+```
+
+**PowerShell**:
+
+```powershell
+bash .\code\fault-injection\inject_faults.sh full-scenario
+```
+
+> **Expected Output**: Executes baseline checks, CoreDNS crash recovery, NetworkPolicy blocking/remediation, and CNI node crashes, concluding with:
+> `=== ALL SCENARIOS PASSED SUCCESSFULLY ===`
+
+---
+
+### 2. NetworkPolicy Fault Injection & Self-Healing
+
+Apply a blocking NetworkPolicy that cuts off cross-namespace traffic:
+
+**Git Bash**:
+
+```bash
+./code/fault-injection/inject_faults.sh apply-bad-policy
+```
+
+**PowerShell**:
+
+```powershell
+bash .\code\fault-injection\inject_faults.sh apply-bad-policy
+```
+
+- **Observe in Grafana**:
+  1. Within ~15s, **`Pod-to-Pod Connectivity`** panel turns **RED** (`BLOCKED`).
+  2. The Go operator receives the `PodConnectivityBlocked` alert, deletes `block-all-ingress`, and restores `baseline-allow-all`.
+  3. Within ~30s total, Grafana turns back to **GREEN** (`CONNECTED`).
+
+---
+
+### 3. CNI Node Container Restart Test
+
+Trigger a CNI container process crash:
+
+**Git Bash**:
+
+```bash
+./code/fault-injection/inject_faults.sh kill-cni
+```
+
+**PowerShell**:
+
+```powershell
+bash .\code\fault-injection\inject_faults.sh kill-cni
+```
+
+- **Observe in Grafana**:
+  The **`CNI Pod Restarts`** stat card increments by **`1`** (e.g., from `0` to `1`) after `kube-state-metrics` scrapes Kubelet (~15-30s).
+
+---
+
+### 4. CoreDNS Diagnostic Check
+
+Check CoreDNS resolution status:
+
+**Git Bash**:
+
+```bash
+./code/fault-injection/inject_faults.sh check-dns
+```
+
+**PowerShell**:
+
+```powershell
+bash .\code\fault-injection\inject_faults.sh check-dns
+```
+
+---
+
+### 5. Running Go Operator Unit Tests
+
+Run the Go unit test suite:
+
+```bash
+cd code/operator-go
+go test -v ./...
+```
+
+> **Expected Output**:
+>
+> ```text
+> === RUN   TestWebhookRejectsGet
+> --- PASS: TestWebhookRejectsGet (0.00s)
+> === RUN   TestWebhookAcceptsValidAlert
+> --- PASS: TestWebhookAcceptsValidAlert (0.00s)
+> === RUN   TestCooldownMechanism
+> --- PASS: TestCooldownMechanism (0.00s)
+> PASS
+> ```
+
+---
+
+### 6. Verifying Operator Logs Directly
+
+Inspect live remediation logs from the Go operator pod:
+
+```bash
+kubectl logs -n kube-system deployment/network-operator --tail=30
+```
+
+> **Expected Log Output**:
+>
+> ```text
+> Received firing alert: PodConnectivityBlocked
+> Remediating NetworkPolicy: Restoring baseline allow-all policy...
+> Deleting blocking NetworkPolicy block-all-ingress in test-namespace-1
+> Restored baseline NetworkPolicy in test-namespace-1
+> Restored baseline NetworkPolicy in test-namespace-2
+> ```
+
+---
+
+## Self-Healing SLA & Timeline
+
+| Stage            | Component       | Duration | Description                                                                           |
+| :--------------- | :-------------- | :------- | :------------------------------------------------------------------------------------ |
+| **Detection**    | Python Probes   | ~15s     | Probes detect traffic failure (`connectivity_success = 0`).                           |
+| **Evaluation**   | Prometheus Rule | ~15s     | Prometheus verifies `for: 15s` before marking alert as Firing.                        |
+| **Dispatch**     | Alertmanager    | ~10s     | Alertmanager buffers alert (`groupWait: 10s`) and sends HTTP POST to `:8080/webhook`. |
+| **Remediation**  | Go Operator     | < 1s     | Operator deletes invalid NetworkPolicy & applies `baseline-allow-all`.                |
+| **Verification** | Probe + Grafana | ~15s     | Next probe cycle passes (`connectivity_success = 1`), updating Grafana to Green.      |
+
+**Total Self-Healing SLA**: **~50 - 60 seconds** end-to-end.
+
+---
+
+## Troubleshooting
+
+### Nodes or Calico Pods Not Ready
+
+```powershell
+kubectl get nodes
+kubectl get pods -n calico-system
+```
+
+Wait until all nodes are `Ready` and Calico pods show `1/1 Running`.
+
+### Grafana Panels Show "No data"
+
+Ensure probe pods are running:
+
+```powershell
+kubectl get pods -n monitoring -l 'app in (dns-probe, connectivity-probe)'
+```
+
+If missing, re-apply probes:
+
+```powershell
+kubectl apply -f code/manifests/probes.yaml
+```
+
+---
+
+## Cluster Tear-Down & Resource Cleanup Guide
+
+When you have finished testing and recording your demo, follow these steps to completely tear down the cluster and free up CPU/RAM resources on your machine so there are no background leaks:
+
+### 1. Stop Active Port-Forwarding Terminals
+
+If you ran `kubectl port-forward` to access Grafana, press **`Ctrl + C`** in your terminal window to terminate the background proxy process.
+
+### 2. Delete the KIND Cluster
+
+Delete the entire local Kubernetes cluster (nodes, containers, and virtual network interfaces):
+
+**Git Bash / PowerShell**:
+
+```bash
+kind delete cluster --name k8s-network-healing
+```
+
+> **Verification**: Run `kind get clusters` — it should output `No kind clusters found.`
+
+### 3. Prune Unused Docker Cache & Temp Container Data
+
+Clean up temporary Docker images and build layers created during cluster setup:
+
+```bash
+docker system prune -f
+```
+
+### 4. Close Docker Desktop (Optional)
+
+If you do not need Docker for other work, right-click the Docker Desktop icon in your Windows system tray and select **Quit Docker Desktop** to free up system memory.
+
+---
+
+## License
+
+MIT License - Created for Kubernetes Network Engineering & Self-Healing Automation.

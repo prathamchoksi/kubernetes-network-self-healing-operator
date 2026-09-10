@@ -108,6 +108,7 @@ docker build -t network-operator:latest (Join-Path $ProjectRoot "operator-go")
 kind load docker-image network-operator:latest --name $ClusterName
 
 Write-Host "`n=== Deploying Probes and Operator ===" -ForegroundColor Cyan
+kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f (Join-Path $ProjectRoot "manifests\probes.yaml")
 kubectl apply -f (Join-Path $ProjectRoot "manifests\operator.yaml")
 
