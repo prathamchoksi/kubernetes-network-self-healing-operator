@@ -98,6 +98,19 @@ Write-Host "`n=== Test app status ===" -ForegroundColor Cyan
 kubectl get pods -n test-namespace-1
 kubectl get pods -n test-namespace-2
 
+Write-Host "`n=== Building and Loading Custom Images ===" -ForegroundColor Cyan
+# Build and load probes
+docker build -t network-probes:latest (Join-Path $ProjectRoot "probes")
+kind load docker-image network-probes:latest --name $ClusterName
+
+# Build and load operator
+docker build -t network-operator:latest (Join-Path $ProjectRoot "operator-go")
+kind load docker-image network-operator:latest --name $ClusterName
+
+Write-Host "`n=== Deploying Probes and Operator ===" -ForegroundColor Cyan
+kubectl apply -f (Join-Path $ProjectRoot "manifests\probes.yaml")
+kubectl apply -f (Join-Path $ProjectRoot "manifests\operator.yaml")
+
 Write-Host "`n=== Installing Monitoring Stack (Prometheus, Alertmanager, Grafana, Loki) ===" -ForegroundColor Cyan
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add grafana https://grafana.github.io/helm-charts
@@ -108,6 +121,12 @@ helm upgrade --install prometheus prometheus-community/kube-prometheus-stack --n
 
 # Install Loki stack (Loki + Promtail + Grafana with dashboard sidecar enabled)
 helm upgrade --install loki grafana/loki-stack --namespace monitoring --create-namespace --set grafana.enabled=true,grafana.sidecar.dashboards.enabled=true,prometheus.enabled=true,prometheus.isDefault=false,prometheus.url=http://prometheus-kube-prometheus-prometheus.monitoring:9090
+
+Write-Host "`n=== Applying Custom Monitoring Configurations ===" -ForegroundColor Cyan
+kubectl apply -f (Join-Path $ProjectRoot "manifests\monitoring\service-monitors.yaml")
+kubectl apply -f (Join-Path $ProjectRoot "manifests\monitoring\alerts.yaml")
+kubectl apply -f (Join-Path $ProjectRoot "manifests\monitoring\alertmanager-config.yaml")
+kubectl apply -f (Join-Path $ProjectRoot "manifests\monitoring\grafana-dashboards.yaml")
 
 Write-Host "`n=== CLUSTER READY ===" -ForegroundColor Green
 Write-Host "Cluster: $ClusterName"

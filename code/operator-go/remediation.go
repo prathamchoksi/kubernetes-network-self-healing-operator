@@ -11,6 +11,10 @@ import (
 )
 
 func remediateDNS() {
+	if clientset == nil {
+		log.Println("Clientset not initialized; skipping DNS remediation.")
+		return
+	}
 	log.Println("Remediating DNS: Restarting CoreDNS pods...")
 	ctx := context.Background()
 	pods, err := clientset.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
@@ -34,6 +38,9 @@ func remediateDNS() {
 }
 
 func deployBackupDNS() {
+	if clientset == nil {
+		return
+	}
 	ctx := context.Background()
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -67,54 +74,68 @@ func deployBackupDNS() {
 
 	_, err := clientset.AppsV1().Deployments("kube-system").Create(ctx, deployment, metav1.CreateOptions{})
 	if err != nil {
-		log.Printf("Backup DNS deployment failed (may already exist): %v", err)
+		log.Printf("Backup DNS deployment note (may already exist): %v", err)
 	} else {
 		log.Println("Successfully deployed Backup DNS.")
 	}
 }
 
 func remediateNetworkPolicy() {
+	if clientset == nil {
+		log.Println("Clientset not initialized; skipping NetworkPolicy remediation.")
+		return
+	}
 	log.Println("Remediating NetworkPolicy: Restoring baseline allow-all policy...")
 	ctx := context.Background()
 	
 	namespaces := []string{"test-namespace-1", "test-namespace-2"}
 	for _, ns := range namespaces {
-		// First, delete existing blocking policies
+		hasBaseline := false
 		policies, err := clientset.NetworkingV1().NetworkPolicies(ns).List(ctx, metav1.ListOptions{})
 		if err == nil {
 			for _, policy := range policies.Items {
-				log.Printf("Deleting NetworkPolicy %s in %s", policy.Name, ns)
-				_ = clientset.NetworkingV1().NetworkPolicies(ns).Delete(ctx, policy.Name, metav1.DeleteOptions{})
+				if policy.Name != "baseline-allow-all" {
+					log.Printf("Deleting blocking NetworkPolicy %s in %s", policy.Name, ns)
+					_ = clientset.NetworkingV1().NetworkPolicies(ns).Delete(ctx, policy.Name, metav1.DeleteOptions{})
+				} else {
+					hasBaseline = true
+				}
 			}
 		}
 
-		// Restore baseline allow-all policy
-		baselinePolicy := &networkingv1.NetworkPolicy{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "baseline-allow-all",
-				Namespace: ns,
-			},
-			Spec: networkingv1.NetworkPolicySpec{
-				PodSelector: metav1.LabelSelector{},
-				PolicyTypes: []networkingv1.PolicyType{
-					networkingv1.PolicyTypeIngress,
-					networkingv1.PolicyTypeEgress,
+		if !hasBaseline {
+			// Restore baseline allow-all policy
+			baselinePolicy := &networkingv1.NetworkPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "baseline-allow-all",
+					Namespace: ns,
 				},
-				Ingress: []networkingv1.NetworkPolicyIngressRule{{}},
-				Egress:  []networkingv1.NetworkPolicyEgressRule{{}},
-			},
-		}
+				Spec: networkingv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{},
+					PolicyTypes: []networkingv1.PolicyType{
+						networkingv1.PolicyTypeIngress,
+						networkingv1.PolicyTypeEgress,
+					},
+					Ingress: []networkingv1.NetworkPolicyIngressRule{{}},
+					Egress:  []networkingv1.NetworkPolicyEgressRule{{}},
+				},
+			}
 
-		_, err = clientset.NetworkingV1().NetworkPolicies(ns).Create(ctx, baselinePolicy, metav1.CreateOptions{})
-		if err != nil {
-			log.Printf("Failed to create baseline policy in %s: %v", ns, err)
-		} else {
-			log.Printf("Restored baseline NetworkPolicy in %s", ns)
+			_, err = clientset.NetworkingV1().NetworkPolicies(ns).Create(ctx, baselinePolicy, metav1.CreateOptions{})
+			if err != nil {
+				log.Printf("Note on creating baseline policy in %s: %v", ns, err)
+			} else {
+				log.Printf("Restored baseline NetworkPolicy in %s", ns)
+			}
 		}
 	}
 }
 
 func remediateCNI() {
+	if clientset == nil {
+		log.Println("Clientset not initialized; skipping CNI remediation.")
+		return
+	}
 	log.Println("Remediating CNI: Restarting CNI node pods (Calico / Flannel)...")
 	ctx := context.Background()
 

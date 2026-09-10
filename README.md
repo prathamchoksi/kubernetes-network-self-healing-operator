@@ -1,6 +1,7 @@
 # Kubernetes Network Self-Healing Operator
 
 A custom Kubernetes operator that automatically detects and remediates networking failures:
+
 - CoreDNS health monitoring with auto-restart
 - NetworkPolicy reachability detection with policy reapplication
 - Fault injection scripts for testing
@@ -11,28 +12,31 @@ A custom Kubernetes operator that automatically detects and remediates networkin
 
 ```
 .
-├── IMPLEMENTATION_PLAN.md      # Full architecture and implementation plan
-├── Project_details.md          # Project specification
-├── kind-config.yaml            # KIND cluster configuration
-├── cluster-setup.ps1           # Automates cluster creation (Calico / Flannel)
-├── install-tools.ps1           # Installs Docker, KIND, kubectl
-├── manifests/
-│   ├── calico-custom-resources.yaml
-│   ├── test-app/
-│   │   └── test-app.yaml       # Test pods and services
-│   ├── monitoring/             # Prometheus rules, Alertmanager config, ServiceMonitors
-│   └── probes.yaml             # In-cluster probe deployments and RBAC
-├── operator-go/
-│   ├── go.mod
-│   ├── go.sum
-│   └── main.go                 # Go operator + Alertmanager webhook receiver (:8080)
-├── probes/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── dns_probe.py            # CoreDNS health checking
-│   └── connectivity_probe.py   # Pod-to-pod connectivity testing
-└── fault-injection/
-    └── inject_faults.sh        # Fault injection scripts
+├── AI_Used/                    # Documentation on AI contributions and setup
+│   ├── IMPLEMENTATION_PLAN.md
+│   ├── Project_details.md
+│   └── SETUP_SUMMARY.md
+├── code/                       # Main source code folder
+│   ├── kind-config.yaml            # KIND cluster configuration
+│   ├── cluster-setup.ps1           # Automates cluster creation (Calico / Flannel)
+│   ├── install-tools.ps1           # Installs Docker, KIND, kubectl, helm
+│   ├── manifests/
+│   │   ├── calico-custom-resources.yaml
+│   │   ├── test-app/
+│   │   │   └── test-app.yaml       # Test pods and services
+│   │   ├── monitoring/             # Prometheus rules, Alertmanager config, ServiceMonitors
+│   │   └── probes.yaml             # In-cluster probe deployments and RBAC
+│   ├── operator-go/
+│   │   ├── go.mod
+│   │   ├── go.sum
+│   │   └── main.go                 # Go operator + Alertmanager webhook receiver (:8080)
+│   ├── probes/
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   ├── dns_probe.py            # CoreDNS health checking
+│   │   └── connectivity_probe.py   # Pod-to-pod connectivity testing
+│   └── fault-injection/
+│       └── inject_faults.sh        # Fault injection scripts
 ```
 
 ## Quick Start
@@ -42,38 +46,37 @@ A custom Kubernetes operator that automatically detects and remediates networkin
 **Windows users**: Run as Administrator
 
 ```powershell
-# 1. Install tools (kubectl, KIND, Docker)
+# 1. Install tools (kubectl, KIND, Docker, Helm)
+cd code
 .\install-tools.ps1
 
 # 2. For Docker Desktop, download and install manually:
 # https://www.docker.com/products/docker-desktop
 
-# 3. Install Python dependencies (if Python 3.10+ not installed):
-python -m pip install --upgrade pip
-pip install kopf kubernetes pyyaml
+# 3. Restart PowerShell to update PATH
 
-# 4. Restart PowerShell to update PATH
-
-# 5. Verify installation:
+# 4. Verify installation:
 docker --version
 kubectl version --client
 kind version
-python --version
+helm version
 ```
 
 ### Step 1: Cluster Bring-up
 
 ```powershell
-cd C:\Users\prath\Documents\CN_Project
+cd code
 .\cluster-setup.ps1
 ```
 
 This will:
+
 1. Create a KIND cluster with 3 nodes (1 control-plane, 2 workers)
-2. Install Calico CNI
+2. Install Calico CNI (or Flannel) and monitoring stack (Prometheus, Alertmanager, Grafana, Loki)
 3. Deploy test apps (nginx server + curl clients)
 
-**Checkpoint**: 
+**Checkpoint**:
+
 - `kubectl get nodes` shows all Ready
 - `kubectl get pods -n calico-system` shows Calico Running
 - Test app pods are Running in test-namespace-1 and test-namespace-2
@@ -90,29 +93,37 @@ kubectl exec -it curl-client-2 -n test-namespace-2 -- curl -v http://nginx-serve
 ## Implementation Phases
 
 ### Phase 1: Fault Injection (Step 2)
+
 Build scripts to simulate failures:
+
 - Kill CoreDNS pod
 - Apply broken NetworkPolicy
 
 **Location**: `fault-injection/inject_faults.sh`
 
 ### Phase 2: Probes & Operator Skeleton (Step 3)
+
 Build independent components:
+
 - **Track A**: DNS probe - monitor CoreDNS latency/crashes
 - **Track B**: Connectivity probe - test pod-to-pod traffic
 - **Track C**: Operator skeleton - watch CoreDNS pod status
 
-**Location**: `probes/` and `operator/`
+**Location**: `probes/` and `operator-go/`
 
 ### Phase 3: Remediation Loops (Steps 4-5)
+
 Wire together detection + fixes:
+
 - CoreDNS crash detection → auto-restart pod
 - Connectivity failure → reapply NetworkPolicy
 
 ### Phase 4: Integration & Hardening (Step 6)
+
 Run both scenarios, fix edge cases
 
 ### Phase 5: Observability & Demo (Steps 7-8)
+
 - Minimal Grafana dashboard (optional)
 - Record backup demo video
 - Write README and report
@@ -156,18 +167,21 @@ kubectl exec -it curl-client-2 -n test-namespace-2 -- curl http://nginx-server-1
 ## Common Issues
 
 ### Docker not found
+
 ```powershell
 # Add Docker to PATH after installation, or
 # Download Docker Desktop manually from https://www.docker.com/products/docker-desktop
 ```
 
 ### kubectl cluster context
+
 ```powershell
 # KIND automatically sets up kubeconfig, but you can verify:
 kubectl config current-context    # Should show: kind-k8s-network-healing
 ```
 
 ### Calico pods not starting
+
 ```powershell
 # Wait a bit longer, or check logs:
 kubectl logs -n calico-system -l app=calico-node

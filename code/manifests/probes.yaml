@@ -9,13 +9,13 @@ kind: ClusterRole
 metadata:
   name: network-probes-role
 rules:
-  - apiGroup: ""
+  - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
-  - apiGroup: ""
+  - apiGroups: [""]
     resources: ["pods/exec"]
     verbs: ["create", "get"]
-  - apiGroup: "networking.k8s.io"
+  - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
     verbs: ["get", "list", "watch"]
 ---

@@ -53,6 +53,9 @@ if ($choco) {
         Write-Host "`nInstalling KIND..." -ForegroundColor Cyan
         choco install kind -y
     }
+    
+    Write-Host "`nInstalling Helm..." -ForegroundColor Cyan
+    choco install kubernetes-helm -y
 } else {
     Write-Host "Chocolatey not found. Using manual installation..." -ForegroundColor Yellow
     
@@ -88,6 +91,20 @@ if ($choco) {
         }
     }
     
+    Write-Host "`nDownloading Helm..." -ForegroundColor Cyan
+    $helmZip = Join-Path $installDir "helm.zip"
+    try {
+        Invoke-WebRequest -Uri "https://get.helm.sh/helm-v3.13.0-windows-amd64.zip" -OutFile $helmZip -UseBasicParsing
+        Expand-Archive -Path $helmZip -DestinationPath $installDir -Force
+        Move-Item -Path (Join-Path $installDir "windows-amd64\helm.exe") -Destination (Join-Path $installDir "helm.exe") -Force
+        Remove-Item $helmZip
+        Remove-Item (Join-Path $installDir "windows-amd64") -Recurse
+        Write-Host "Helm downloaded" -ForegroundColor Green
+        Add-ToPath $installDir
+    } catch {
+        Write-Host "Failed to download Helm: $_" -ForegroundColor Red
+    }
+    
     if (-not $SkipDocker) {
         Write-Host "`nDocker Desktop must be installed manually" -ForegroundColor Yellow
         Write-Host "Download from: https://www.docker.com/products/docker-desktop" -ForegroundColor Cyan
@@ -97,12 +114,12 @@ if ($choco) {
 
 Write-Host "`n=== Verification ===" -ForegroundColor Cyan
 Write-Host "Checking installation..." -ForegroundColor Yellow
-$tools = @("docker", "kubectl", "kind")
+$tools = @("docker", "kubectl", "kind", "helm")
 foreach ($tool in $tools) {
     $cmd = Get-Command $tool -ErrorAction SilentlyContinue
     if ($cmd) {
         Write-Host "OK: $tool is installed" -ForegroundColor Green
-        & $tool --version 2>$null
+        & $tool version 2>$null
     } else {
         Write-Host "MISSING: $tool not found" -ForegroundColor Red
     }
@@ -111,5 +128,5 @@ foreach ($tool in $tools) {
 Write-Host "`n=== Next Steps ===" -ForegroundColor Cyan
 Write-Host "1. If Docker is not installed, download and run Docker Desktop installer"
 Write-Host "2. Restart PowerShell to reload PATH"
-Write-Host "3. Run: cd C:\Users\prath\Documents\CN_Project"
+Write-Host "3. Run: cd code"
 Write-Host "4. Run: .\cluster-setup.ps1" -ForegroundColor Yellow
