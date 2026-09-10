@@ -17,6 +17,7 @@ Install the remaining tools:
 ```powershell
 winget install --id Kubernetes.kubectl -e
 winget install --id Kubernetes.kind -e
+winget install --id Helm.Helm -e
 ```
 
 Restart PowerShell so the updated `PATH` is loaded.
@@ -28,14 +29,7 @@ docker --version
 docker info
 kubectl version --client
 kind version
-python --version
-```
-
-Python 3.10 or newer is required. Install the operator dependencies:
-
-```powershell
-python -m pip install --upgrade pip
-python -m pip install kopf kubernetes pyyaml
+helm version
 ```
 
 ## 2. Get the project
@@ -56,6 +50,7 @@ git pull origin main
 Run PowerShell from the project directory:
 
 ```powershell
+cd code
 .\cluster-setup.ps1
 ```
 

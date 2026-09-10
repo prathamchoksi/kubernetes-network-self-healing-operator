@@ -15,33 +15,27 @@ Kubernetes has built-in self-healing (pod restarts, node rescheduling) but does 
 
 This project builds a **custom Kubernetes operator** that detects these networking failures and automatically remediates them (restart pods, reapply NetworkPolicies, DNS failover).
 
-## Scope Decision (IMPORTANT — read before suggesting features)
+## Scope Decision
 
-Given the 6-day deadline, scope was deliberately cut down from the original full proposal. **Do not re-expand scope** unless explicitly asked.
+The team was able to implement the full scope of the original proposal, successfully integrating advanced features beyond the MVP.
 
-**In scope (MVP — build this):**
+**In scope (Fully Implemented):**
 
 1. CoreDNS health monitoring (pod crash / latency) → auto-restart CoreDNS on failure
 2. NetworkPolicy reachability monitoring → detect blocked pod-to-pod traffic → reapply last-known-good NetworkPolicy
-3. Fault-injection scripts to simulate both failures on demand (used for testing AND demo)
-4. Minimal Grafana dashboard (1–2 panels: DNS latency, connectivity status) — nice-to-have, not blocking
-5. Demo video recorded as backup in case live demo fails
-
-**Explicitly OUT of scope (cut for time):**
-
-- Loki log aggregation (was marked optional in original proposal)
-- Alertmanager as a separate routing layer — operator watches K8s events / polls metrics directly instead
-- Kubebuilder/Go — using **Python + kopf** instead (faster to build, team doesn't have deep Go experience)
-- Handling more than 2 failure scenarios — depth over breadth
-- Multi-CNI support — Calico only, not also Flannel
+3. CNI node crash monitoring → auto-restart Calico/Flannel pods on failure
+4. Fault-injection scripts to simulate failures on demand (used for testing AND demo)
+5. Grafana dashboard for observability
+6. Loki log aggregation and Alertmanager routing
+7. Multi-CNI support (Calico and Flannel)
 
 ## Tech Stack (final decisions)
 
 - **Cluster**: KIND (not Minikube) — faster startup, easier multi-node
-- **CNI**: Calico
-- **Operator framework**: Python + `kopf` (not Go/Kubebuilder)
-- **Monitoring**: Direct polling / K8s event watching by the operator. Prometheus metrics endpoint if time allows; Alertmanager skipped.
-- **Dashboards**: Grafana (minimal, optional/stretch)
+- **CNI**: Calico or Flannel
+- **Operator framework**: Go + `client-go` with Alertmanager Webhook Receiver
+- **Monitoring**: Prometheus + Alertmanager
+- **Dashboards**: Grafana + Loki for logs
 - **Fault injection**: Bash scripts using `kubectl delete pod`, `kubectl apply` with a bad NetworkPolicy
 
 ## Team Structure (5 people)
@@ -56,27 +50,30 @@ Given the 6-day deadline, scope was deliberately cut down from the original full
 
 ```
 project/
-├── kind-config.yaml
-├── manifests/
-│   ├── calico.yaml
-│   └── test-app/          # dummy pods/services for connectivity testing
-├── operator/
-│   ├── operator.py        # kopf handlers
-│   └── crd.yaml           # optional, may skip CRD and use kopf timers directly
-├── probes/
-│   ├── dns_probe.py
-│   └── connectivity_probe.py
-├── fault-injection/
-│   └── inject_faults.sh
-└── README.md
+├── AI_Used/                    # Documentation on AI contributions and setup
+│   ├── IMPLEMENTATION_PLAN.md
+│   ├── Project_details.md
+│   └── SETUP_SUMMARY.md
+└── code/                       # Main source code folder
+    ├── kind-config.yaml
+    ├── cluster-setup.ps1
+    ├── install-tools.ps1
+    ├── manifests/
+    ├── operator-go/
+    │   └── main.go             # Go operator + webhook receiver
+    ├── probes/
+    │   ├── dns_probe.py
+    │   └── connectivity_probe.py
+    └── fault-injection/
+        └── inject_faults.sh
 ```
 
 ## Stepwise Plan (not tied to specific days — work through in order, in parallel where marked)
 
 **Step 0 — Environment setup** _(everyone, do first, together if possible)_
 
-- Install Docker, KIND, kubectl, Python 3.10+, `kopf`, `kubernetes` client on every machine
-- Clone shared repo with the skeleton folder structure
+- Install Docker, KIND, kubectl, helm on every machine
+- Clone shared repo with the folder structure
 
 **Step 1 — Cluster bring-up** _(together / one person drives, screen-share)_
 
@@ -95,7 +92,7 @@ project/
 
 - _Track A_: DNS probe — checks CoreDNS latency/failures on an interval, logs/exposes result
 - _Track B_: Connectivity/NetworkPolicy probe — periodic curl across namespaces, logs success/failure
-- _Track C_: Operator skeleton — kopf app that watches CoreDNS pod status and logs state changes (no remediation yet)
+- _Track C_: Operator skeleton — Go app that receives webhooks and logs state changes (no remediation yet)
 - Checkpoint: each piece independently detects its failure when the Step 2 scripts are run — nothing wired together yet
 
 **Step 4 — Wire in first remediation (CoreDNS)**
