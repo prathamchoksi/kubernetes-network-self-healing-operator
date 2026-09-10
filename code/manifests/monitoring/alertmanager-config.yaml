@@ -15,7 +15,5 @@ spec:
   receivers:
     - name: operator-webhook
       webhookConfigs:
-        # Use host.docker.internal:8080 for local operator development (go run .)
-        # Use http://network-operator-webhook.kube-system.svc:8080/webhook when operator is deployed in-cluster
-        - url: http://host.docker.internal:8080/webhook
+        - url: http://network-operator-webhook.kube-system.svc:8080/webhook
           sendResolved: false

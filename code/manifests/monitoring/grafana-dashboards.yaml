@@ -39,7 +39,7 @@ data:
           "type": "row"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -75,7 +75,7 @@ data:
           ]
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -111,7 +111,7 @@ data:
           ]
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -147,7 +147,7 @@ data:
           ]
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -189,7 +189,7 @@ data:
           "type": "row"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineInterpolation": "smooth" },
@@ -209,7 +209,7 @@ data:
           ]
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineInterpolation": "smooth" },
@@ -236,7 +236,7 @@ data:
           "type": "row"
         },
         {
-          "datasource": { "type": "loki", "uid": "loki" },
+          "datasource": { "type": "loki", "uid": "Loki" },
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
           "id": 7,
           "options": {
