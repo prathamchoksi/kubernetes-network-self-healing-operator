@@ -1,5 +1,11 @@
 # Kubernetes Network Self-Healing Operator
 
+Hem Tilva (24110374)
+Vansh Barfiwala (24110380)
+Pratham Choksi (24110275)
+Shivangi Thaker (24110371)
+Jils Shah (24110148)
+
 A custom Kubernetes operator that automatically detects and remediates networking failures:
 
 - CoreDNS health monitoring with auto-restart
